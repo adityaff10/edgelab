@@ -1,0 +1,35 @@
+{
+  "hypothesis": "E001-VRP-NIFTY",
+  "registered_verdict": "FAIL",
+  "criteria": {
+    "c1": false,
+    "c2": true,
+    "c3": true,
+    "c4": true
+  },
+  "vol_spread_mean_volpts": 1.89,
+  "nw_t": 1.96,
+  "variance_premium_posthoc": {
+    "mean_var_units": 0.00044,
+    "t": 0.06,
+    "median_var_units": 0.00734,
+    "share_positive": 0.767,
+    "t_excluding_feb_apr_2020": 3.09,
+    "reading": "Squaring makes the COVID window dominate; the variance premium is ~0 over the full sample."
+  },
+  "ledger": {
+    "chain_valid_against_previous_checkpoint": true,
+    "trials_total": 2,
+    "trials_by_type": {
+      "new": 1,
+      "rerun": 0,
+      "robustness": 1,
+      "parameter_change": 0
+    },
+    "checkpoint": {
+      "n_entries": 3,
+      "head_hash": "ebaf6a7d15abece64ce748d5bab20c6d2420b5993252e982da73703c6d9c6f50",
+      "written": "2026-10-18T16:07:15.617680+00:00"
+    }
+  }
+}
