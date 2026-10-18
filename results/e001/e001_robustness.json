@@ -1,0 +1,151 @@
+{
+  "phase_offsets_t": {
+    "min": 1.83,
+    "median": 2.25,
+    "max": 2.58,
+    "share_t_gt_2": 0.762
+  },
+  "phases": [
+    {
+      "offset": 0,
+      "n": 73,
+      "mean_volpts": 1.89,
+      "t": 1.96
+    },
+    {
+      "offset": 1,
+      "n": 73,
+      "mean_volpts": 1.93,
+      "t": 1.98
+    },
+    {
+      "offset": 2,
+      "n": 73,
+      "mean_volpts": 1.8,
+      "t": 1.83
+    },
+    {
+      "offset": 3,
+      "n": 72,
+      "mean_volpts": 1.9,
+      "t": 1.96
+    },
+    {
+      "offset": 4,
+      "n": 72,
+      "mean_volpts": 1.98,
+      "t": 2.02
+    },
+    {
+      "offset": 5,
+      "n": 72,
+      "mean_volpts": 2.02,
+      "t": 2.07
+    },
+    {
+      "offset": 6,
+      "n": 72,
+      "mean_volpts": 2.04,
+      "t": 2.05
+    },
+    {
+      "offset": 7,
+      "n": 72,
+      "mean_volpts": 2.14,
+      "t": 2.33
+    },
+    {
+      "offset": 8,
+      "n": 72,
+      "mean_volpts": 2.21,
+      "t": 2.45
+    },
+    {
+      "offset": 9,
+      "n": 72,
+      "mean_volpts": 2.05,
+      "t": 2.32
+    },
+    {
+      "offset": 10,
+      "n": 72,
+      "mean_volpts": 1.96,
+      "t": 2.16
+    },
+    {
+      "offset": 11,
+      "n": 72,
+      "mean_volpts": 2.12,
+      "t": 2.48
+    },
+    {
+      "offset": 12,
+      "n": 72,
+      "mean_volpts": 1.99,
+      "t": 2.25
+    },
+    {
+      "offset": 13,
+      "n": 72,
+      "mean_volpts": 1.85,
+      "t": 1.96
+    },
+    {
+      "offset": 14,
+      "n": 72,
+      "mean_volpts": 2.11,
+      "t": 2.35
+    },
+    {
+      "offset": 15,
+      "n": 72,
+      "mean_volpts": 2.06,
+      "t": 2.26
+    },
+    {
+      "offset": 16,
+      "n": 72,
+      "mean_volpts": 2.04,
+      "t": 2.15
+    },
+    {
+      "offset": 17,
+      "n": 72,
+      "mean_volpts": 2.31,
+      "t": 2.44
+    },
+    {
+      "offset": 18,
+      "n": 72,
+      "mean_volpts": 2.39,
+      "t": 2.58
+    },
+    {
+      "offset": 19,
+      "n": 72,
+      "mean_volpts": 2.18,
+      "t": 2.41
+    },
+    {
+      "offset": 20,
+      "n": 72,
+      "mean_volpts": 2.11,
+      "t": 2.29
+    }
+  ],
+  "nw_lag_sensitivity_t": {
+    "0": 1.95,
+    "1": 1.9,
+    "3": 1.96,
+    "6": 2.19
+  },
+  "overlapping_daily_nw21": {
+    "mean_volpts": 2.05,
+    "t": 2.49,
+    "n": 1515
+  },
+  "excluding_feb_apr_2020": {
+    "mean_volpts": 2.59,
+    "t": 4.57
+  }
+}
