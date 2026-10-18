@@ -39,7 +39,20 @@ def main(raw: Path, out: Path):
     m_all, t_all = newey_west_tstat(df["spread"], 21)
     ex = df[~(((df.index >= "2020-02-01") & (df.index <= "2020-04-30")))]
     m_ex, t_ex = newey_west_tstat(ex["spread"].iloc[::H], 3)
+    # Variance form (IV^2 - RV^2). Added after an external review asked for it, i.e. after the
+    # registered result was known; reported as post-hoc, never as part of the verdict.
+    vp = ((df["vix"] / 100) ** 2 - df["rv"] ** 2)
+    vp_n = vp.iloc[::H]
+    m_vp, t_vp = newey_west_tstat(vp_n, 3)
+    vp_ex = vp[~((vp.index >= "2020-02-01") & (vp.index <= "2020-04-30"))].iloc[::H]
     res = {
+        "variance_premium_posthoc": {
+            "mean_var_units": round(m_vp, 5), "t": round(t_vp, 2),
+            "median_var_units": round(float(vp_n.median()), 5),
+            "share_positive": round(float((vp_n > 0).mean()), 3),
+            "t_excluding_feb_apr_2020": round(newey_west_tstat(vp_ex, 3)[1], 2),
+            "reading": "Squaring makes the COVID window dominate; the variance premium is ~0 over the full sample.",
+        },
         "phase_offsets_t": {"min": min(tp), "median": float(np.median(tp)), "max": max(tp),
                             "share_t_gt_2": round(float(np.mean(np.array(tp) > 2)), 3)},
         "phases": phases,
@@ -48,7 +61,8 @@ def main(raw: Path, out: Path):
         "excluding_feb_apr_2020": {"mean_volpts": round(m_ex * 100, 2), "t": round(t_ex, 2)},
     }
     ledger = Ledger(out / "ledger.jsonl")
-    ledger.record_trial("E001-VRP-NIFTY", "posthoc_robustness", {k: v for k, v in res.items() if k != "phases"})
+    ledger.record_trial("E001-VRP-NIFTY", "full", {k: v for k, v in res.items() if k != "phases"},
+                        trial_type="robustness")
     (out / "e001_robustness.json").write_text(json.dumps(res, indent=2))
     print(json.dumps({k: v for k, v in res.items() if k != "phases"}, indent=2))
 

@@ -1,78 +1,100 @@
 # edgelab
 
 A small research lab for Indian index options whose main job is to **reject false
-discoveries** before anyone trades them. It is not a trading bot. Live execution does not exist
-in this codebase.
+discoveries** before anyone trades them. It is not a trading bot; no live order path exists.
 
-## What it contains
+## Quick start (Windows PowerShell; on macOS/Linux use `source .venv/bin/activate`)
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python scripts/fetch_data.py --dest data/raw          # pinned commits + content-hash check
+python -m pytest -q                                   # 26 tests
+python -m experiments.run_all --raw data/raw --out results/e001_mine
+```
+
+`run_all` runs the registered experiment, the post-hoc robustness checks, verifies the ledger,
+writes `checkpoint.json` and `summary.json`. Compare your `summary.json` with
+`results/e001/summary.json`; the statistics should match exactly.
+
+Data is not redistributed (exchange-data licensing is restrictive). `data_manifest.json` pins the
+source commits and lists LF-normalised content hashes, so Windows and Linux checkouts verify alike.
+
+## How a hypothesis flows
+
+1. **Write** the hypothesis and pass/fail rules first — `experiments/E001_vrp_preregistration.md`.
+2. **Register** it in the ledger with provenance: hashes of the pre-registration, code, data manifest, and the git commit.
+3. **Load and validate** data — `edgelab/data.py` (duplicates, gaps, OHLC consistency, large moves, manifest check).
+4. **Compute** the measure — `experiments/e001_vrp.py`.
+5. **Test** it — `edgelab/stats.py`; estimate economics — `edgelab/costs.py`, `edgelab/options.py`.
+6. **Record** the trial, typed `new` / `parameter_change` / `rerun` / `robustness`. Failures count too.
+7. **Verdict** against the pre-written rules — `e001_results.json`.
+8. **Post-hoc checks**, logged as `robustness`, cannot overturn the verdict — `experiments/e001_robustness.py`.
+9. **Checkpoint** the ledger head and store it outside the ledger file (commit it).
+
+## Modules
 
 | Module | Purpose |
 | --- | --- |
-| `edgelab/ledger.py` | Append-only, hash-chained ledger. Hypotheses must be registered with pass/fail criteria before results can be recorded; every evaluation counts as a trial; the holdout can be revealed once, only to a frozen hypothesis. Edits or deleted trials are detected. |
-| `edgelab/stats.py` | Newey-West t-stat, probabilistic and deflated Sharpe (Bailey & López de Prado), expected max Sharpe of N noise strategies, stationary bootstrap, concentration (results without best/worst k). |
-| `edgelab/costs.py` | Effective-dated NSE option costs and contract rules (STT 0.10% → 0.15% on 1 Apr 2026, exchange charges, SEBI fee, GST, stamp, Nifty lot 75 → 65, expiry Thursday → Tuesday). Each value carries its source and a `verified` flag; unverified values raise warnings. |
-| `edgelab/options.py` | Black-Scholes, iron fly construction, entry from real bid/ask quotes (mid / cross / cross + slippage), expiry payoff. Missing strikes raise; nothing is interpolated. |
-| `edgelab/data.py` | Loading, validation (duplicates, gaps, OHLC consistency, large moves), cross-source reconciliation, SHA-256 provenance. |
-| `experiments/` | E001 (pre-registered) and its post-hoc robustness checks. |
+| `edgelab/ledger.py` | Hash-chained ledger. Registration with criteria before results; typed trials; provenance per entry; once-only holdout for frozen hypotheses; external checkpoint detects edits, deletions (including the last entry) and full rebuilds. |
+| `edgelab/stats.py` | Newey-West t, probabilistic and deflated Sharpe, expected max Sharpe of N noise strategies, stationary bootstrap, best/worst-k concentration. |
+| `edgelab/costs.py` | Effective-dated NSE option costs and contract rules with source and `verified` flag; unverified values warn. |
+| `edgelab/options.py` | Black-Scholes; iron fly; entry from a quote snapshot identified by **timestamp + expiry + kind + strike** (schema enforced, duplicates rejected, nothing interpolated); full net trade P&L at expiry. |
+| `edgelab/data.py` | Loading, validation, reconciliation, raw and normalised content hashes, manifest verification. |
 
-## Setup
+## What the ledger does and does not guarantee
 
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-bash scripts/fetch_data.sh data/raw      # clones public third-party copies of daily Nifty and India VIX
-PYTHONPATH=. pytest -q                   # 18 tests
-PYTHONPATH=. python experiments/e001_vrp.py --raw data/raw --out results/e001
-PYTHONPATH=. python experiments/e001_robustness.py --raw data/raw --out results/e001
-```
+- Detects: edited entries, deleted entries, deleted last entries and rebuilt chains — the last two
+  **only against a checkpoint stored elsewhere** (e.g. committed to git).
+- Does not detect: experiments run outside the ledger. Does not stop someone with the raw files
+  from looking at the holdout. It is a discipline tool and audit trail, not a security boundary.
 
-Data is not redistributed here. Exchange data licensing is restrictive; the fetch script pulls
-public copies and the experiment records their SHA-256 hashes.
+## E001 result
 
-## E001 result (actually executed, 18 Oct 2026)
-
-Question: does India VIX exceed the Nifty volatility realised over the following 21 trading days,
-i.e. is there a volatility risk premium for option sellers to harvest? Criteria were written in
-`experiments/E001_vrp_preregistration.md` before computing anything.
-
-Sample: 2 Jan 2020 – 10 Mar 2026, 1,515 days, 73 non-overlapping 21-day windows.
+Question: does India VIX exceed the Nifty volatility realised over the next 21 trading days?
+Sample 2 Jan 2020 – 10 Mar 2026, 73 non-overlapping windows. Independently reproduced on Windows
+(Python 3.10) with identical numbers and, after fixing line-ending handling, identical data hashes.
 
 | Measure | Value |
 | --- | --- |
-| Mean IV − RV | +1.89 vol points (IV 17.23%, RV 15.35%) |
-| Newey-West t (lag 3) | 1.96 — **below the registered bar of 2.0** |
+| Mean IV − RV | +1.89 vol points; Newey-West t = **1.96** (registered bar: 2.0) |
 | Median IV − RV | +2.83 vol points; 76.7% of windows positive |
-| 2020–2022 / 2023–2026 means | +2.29 / +1.52 vol points |
-| Mean edge as share of premium | 11.5% (bootstrap 95% CI 0.4% – 19.7%) |
-| Modelled 1-lot iron fly round-trip cost | ≈2% of credit (Rs 1 spread per leg assumed) |
-| **Registered verdict** | **FAIL (criterion c1 missed; c2–c4 passed)** |
+| 2020–22 / 2023–26 | +2.29 / +1.52 vol points |
+| **Registered verdict** | **FAIL** (c1 missed; c2–c4 passed) |
 
-Post-hoc robustness (logged as extra trials; cannot overturn the verdict):
+Post-hoc (cannot overturn the verdict):
 
-| Check | t-stat |
+| Check | Result |
 | --- | --- |
-| 21 different window start offsets | 1.83 – 2.58 (median 2.25; 76% above 2) |
-| Newey-West lag 0 / 1 / 3 / 6 | 1.95 / 1.90 / 1.96 / 2.19 |
-| All overlapping days, lag 21 | 2.49 |
-| Excluding Feb–Apr 2020 | 4.57 |
+| Variance form, IV² − RV² | mean ≈ 0, **t = 0.06**; t = 3.09 excluding Feb–Apr 2020 |
+| 21 window start offsets (vol form) | t from 1.83 to 2.58 |
+| Overlapping days, lag 21 | t = 2.49 |
+| Excluding Feb–Apr 2020 (vol form) | t = 4.57 |
 
-Model-priced short 21-day ATM straddle (Black-Scholes at VIX; **not a backtest**): mean +0.28% of
-spot per window, median +1.07%, 68% wins, worst −22.8% (window starting 3 Mar 2020). Removing the
-3 best windows cuts the total from 19.9 to 6.8; removing the 3 worst raises it to 54.8.
+**Reading.** The data is consistent with a volatility premium in normal periods, but the
+registered test did not meet its bar, and in variance terms a single crash window erases six years
+of it. That crash risk is what option sellers are paid for, so it must be counted. Criterion c4 is
+a screening estimate only: it compares a straddle's relative edge with an iron fly's modelled costs
+under assumed spreads, and does not show any tradable structure is profitable after costs.
 
-**Reading:** a ~2-vol-point premium very likely exists, but its statistical strength depends on
-whether the COVID crash is counted. That crash is precisely the risk the premium pays for, so it
-must be counted. Costs are not the binding constraint for monthly structures; tail risk is.
+**Decision.** No selling strategy on this evidence. The next test needs real option quotes.
 
-**Decision:** do not build a selling strategy on this evidence. The next gate needs real
-historical option quotes (bid/ask, skew, intraday) to test a specific, registered structure.
+## Before buying any options data
+
+1. Get a **sample file** first and check it has: quote timestamps, expiry, strike, option type,
+   **bid and ask** (not just OHLC candles), contract identifiers, full strike coverage.
+2. Coverage needed for the planned E002: development Jan–Dec 2025 + holdout Jan–Oct 2026
+   (≈22 months), all after the Nov 2024 expiry changes.
+3. Confirm the licence permits private research use, and the total price.
+4. Register E002 (exact rules, criteria) **before** the data arrives.
 
 ## Limitations
 
-- Daily close-to-close data; says nothing about intraday 0DTE straddles.
-- VIX is a variance-swap style 30-day index, not the ATM IV a seller actually receives.
-- The two "independent" Nifty files turned out to be byte-identical (same SHA-256), so the
-  cross-source check is void. Four closes were spot-checked against news sources instead; all
-  matched within 0.1%.
-- Historical exchange charges and pre-2026 STT start dates are not verified (flagged in code).
-- Straddle results are model-priced, not tradable fills.
+- Daily close-to-close data; nothing about intraday or 0DTE structures.
+- VIX is a 30-day variance-style index, not the ATM IV a seller receives.
+- The two Nifty files are byte-identical copies; four closes were spot-checked against news sources.
+- Pre-2026 exchange charges and the start date of the 0.10% STT rate are unverified (flagged in code).
+- Regulatory: SEBI's retail-algo framework requires black-box algo providers to register as research
+  analysts (per NSE's FAQ on the framework); how this applies to any specific service needs
+  professional confirmation. This project is personal research only.

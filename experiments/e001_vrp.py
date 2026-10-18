@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 
 from edgelab import costs
-from edgelab.data import load_ohlc, reconcile, sha256, validate_ohlc
+from edgelab.data import content_sha256, load_ohlc, reconcile, sha256, validate_ohlc, verify_manifest
 from edgelab.ledger import Ledger
 from edgelab.options import bs_price, iron_fly, structure_payoff_at_expiry
 from edgelab.stats import concentration, newey_west_tstat, probabilistic_sharpe, stationary_bootstrap_ci
@@ -38,8 +38,29 @@ def load(raw: Path):
     n1, n2 = load_ohlc(f_n1), load_ohlc(f_n2)
     v = load_ohlc(f_v, rename={"Sum of Open": "Open", "Sum of High": "High",
                                "Sum of Low": "Low", "Sum of Close": "Close"})
-    prov = {str(p): sha256(p) for p in (f_n1, f_n2, f_v)}
+    prov = {p.relative_to(raw).as_posix(): {"content_sha256": content_sha256(p), "raw_sha256": sha256(p)}
+            for p in (f_n1, f_n2, f_v)}
     return n1, n2, v, prov
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def provenance(raw: Path) -> dict:
+    import subprocess
+    manifest = json.loads((ROOT / "data_manifest.json").read_text())
+    try:
+        commit = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True,
+                                text=True, check=True).stdout.strip()
+    except Exception:
+        commit = "unknown (not a git checkout)"
+    return {
+        "prereg_sha256": content_sha256(ROOT / "experiments/E001_vrp_preregistration.md"),
+        "code_sha256": content_sha256(Path(__file__)),
+        "code_commit": commit,
+        "data_manifest_sha256": content_sha256(ROOT / "data_manifest.json"),
+        "data_manifest_problems": verify_manifest(raw, manifest["files"]),
+    }
 
 
 def iron_fly_cost_fraction(spot: float, iv: float, trade_day: date, warn: list) -> dict:
@@ -74,11 +95,15 @@ def main(raw: Path, out: Path):
         "c3": "mean vol spread > 0 in 2020-2022 and in 2023-end",
         "c4": "mean (IV-RV)/IV > model iron-fly round-trip cost fraction",
     }
-    if not [e for e in ledger.entries() if e["kind"] == "register"]:
+    prov = provenance(raw)
+    if prov["data_manifest_problems"]:
+        print("WARNING: input data does not match data_manifest.json:", prov["data_manifest_problems"])
+    first = not [e for e in ledger.entries() if e["kind"] == "register"]
+    if first:
         ledger.register(HID, {"doc": "experiments/E001_vrp_preregistration.md", "horizon": H}, criteria,
-                        frozen=True)
+                        provenance=prov, frozen=True)
 
-    n1, n2, vix, prov = load(raw)
+    n1, n2, vix, file_hashes = load(raw)
     reports = [validate_ohlc(n1, "nifty_fdrm"), validate_ohlc(n2, "nifty_kalilur"),
                validate_ohlc(vix, "india_vix", max_abs_daily_move=0.6, lo=5, hi=95)]
     recon = reconcile(n1["Close"], n2["Close"])
@@ -167,12 +192,14 @@ def main(raw: Path, out: Path):
         "criteria": {"c1": c1, "c2": c2, "c3": c3, "c4": c4},
         "verdict": ("PASS" if all([c1, c2, c3, c4]) else
                     "PREMIUM EXISTS, NOT HARVESTABLE" if all([c1, c2, c3]) else "FAIL"),
+        "c4_caveat": ("Screening only: c4 compares a straddle's relative vol edge with modelled costs of an "
+                      "iron fly under assumed spreads; it does not show a tradable structure is net profitable."),
     }
-    ledger.record_trial(HID, "full", res)
-    meta = {"provenance_sha256": prov, "validation": [r.__dict__ for r in reports],
+    ledger.record_trial(HID, "full", res, trial_type="new" if first else "rerun", provenance=prov)
+    meta = {"provenance": prov, "file_hashes": file_hashes, "validation": [r.__dict__ for r in reports],
             "nifty_sources_identical_on_common_dates": identical,
             "nifty_source_disagreements_gt_0.1pct": int(len(recon)), "spot_checks": spot,
-            "ledger_chain_valid": ledger.verify_chain(), "ledger_trials": ledger.n_trials()}
+            "note": "Ledger state after all steps is in summary.json (written by run_all)."}
     (out / "e001_results.json").write_text(json.dumps({"result": res, "meta": meta}, indent=2, default=str))
     sp.to_csv(out / "e001_model_straddle_windows.csv")
     nono[["iv", "rv", "spread"]].to_csv(out / "e001_windows.csv")

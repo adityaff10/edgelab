@@ -24,7 +24,26 @@ class ValidationReport:
 
 
 def sha256(path: str | Path) -> str:
+    """Raw-byte hash. Changes if Git converts line endings (Windows autocrlf)."""
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def content_sha256(path: str | Path) -> str:
+    """Hash with line endings normalised to LF, so Windows and Linux checkouts agree."""
+    b = Path(path).read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(b).hexdigest()
+
+
+def verify_manifest(root: str | Path, manifest: dict) -> List[str]:
+    """Compare files under root with a manifest {relative_path: content_sha256}. Returns problems."""
+    problems = []
+    for rel, expected in manifest.items():
+        p = Path(root) / rel
+        if not p.exists():
+            problems.append(f"missing {rel}")
+        elif content_sha256(p) != expected:
+            problems.append(f"content hash mismatch for {rel}")
+    return problems
 
 
 def load_ohlc(path: str | Path, date_col: str = "Date", rename: dict | None = None) -> pd.DataFrame:
@@ -51,6 +70,7 @@ def validate_ohlc(df: pd.DataFrame, name: str, max_abs_daily_move: float = 0.15,
     c = df["Close"].dropna()
     if (c <= 0).any():
         r.issues.append("ERROR non-positive closes")
+        c = c[c > 0]          # exclude before taking logs
     if {"High", "Low"} <= set(df.columns):
         bad = ((df["High"] < df["Low"]) | (df["Close"] > df["High"] * 1.0001) |
                (df["Close"] < df["Low"] * 0.9999)).sum()

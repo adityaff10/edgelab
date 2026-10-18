@@ -7,9 +7,12 @@ import pandas as pd
 import pytest
 
 from edgelab import costs
-from edgelab.data import reconcile, validate_ohlc
+from edgelab.data import content_sha256, reconcile, sha256, validate_ohlc, verify_manifest
 from edgelab.ledger import Holdout, Ledger, LedgerError
-from edgelab.options import bs_price, iron_fly, structure_entry, structure_payoff_at_expiry
+from edgelab.options import (bs_price, iron_fly, structure_entry, structure_net_pnl_at_expiry,
+                             structure_payoff_at_expiry)
+
+AT, EXP = "2026-04-13 10:00", "2026-04-28"
 from edgelab.stats import (deflated_sharpe, expected_max_sharpe, newey_west_tstat,
                            probabilistic_sharpe, stationary_bootstrap_ci)
 
@@ -158,23 +161,54 @@ def _fixture_chain():
             rows.append({"kind": "C", "strike": k, "bid": cb, "ask": ca})
         if pa:
             rows.append({"kind": "P", "strike": k, "bid": pb, "ask": pa})
-    return pd.DataFrame(rows)
+    df = pd.DataFrame(rows)
+    df["timestamp"], df["expiry"] = pd.Timestamp(AT), pd.Timestamp(EXP)
+    later = df.copy()                       # a later snapshot with different prices must be ignored
+    later["timestamp"] = pd.Timestamp("2026-04-13 14:00")
+    later[["bid", "ask"]] = later[["bid", "ask"]] * 3
+    return pd.concat([df, later], ignore_index=True)
 
 
-def test_iron_fly_entry_and_bounded_loss():
+def test_iron_fly_entry_uses_only_the_requested_snapshot():
     legs = iron_fly(24000, 500)
-    e = structure_entry(_fixture_chain(), legs, lot_size=65, trade_date=date(2026, 4, 13), model="cross")
-    # cross: sell at bid (150+140), buy at ask (19+21) => 250 per unit
+    e = structure_entry(_fixture_chain(), legs, 65, date(2026, 4, 13), AT, EXP, model="cross")
+    # cross: sell at bid (150+140), buy at ask (19+21) => 250 per unit; the 14:00 snapshot is ignored
     assert e["net_credit"] == pytest.approx(250 * 65)
-    worst = min(structure_payoff_at_expiry(legs, s, 65) for s in range(22000, 26001, 50))
-    assert worst == pytest.approx(-500 * 65)          # loss capped at wing width
-    mid = structure_entry(_fixture_chain(), legs, 65, date(2026, 4, 13), model="mid")
+    mid = structure_entry(_fixture_chain(), legs, 65, date(2026, 4, 13), AT, EXP, model="mid")
     assert mid["net_credit"] > e["net_credit"]         # mid fills are optimistic
+
+
+def test_iron_fly_max_net_loss_is_wing_minus_credit_plus_costs():
+    legs = iron_fly(24000, 500)
+    e = structure_entry(_fixture_chain(), legs, 65, date(2026, 4, 13), AT, EXP)
+    payoffs = [structure_payoff_at_expiry(legs, s, 65) for s in range(22000, 26001, 50)]
+    assert min(payoffs) == pytest.approx(-500 * 65)    # payoff only, before credit and costs
+    worst_net = min(structure_net_pnl_at_expiry(e, legs, s, 65, exit_costs=100.0)
+                    for s in range(22000, 26001, 50))
+    assert worst_net == pytest.approx(-500 * 65 + e["net_credit"] - e["costs"] - 100.0)
+    best_net = structure_net_pnl_at_expiry(e, legs, 24000, 65)
+    assert best_net == pytest.approx(e["net_credit"] - e["costs"])
 
 
 def test_missing_strike_is_an_error_not_an_interpolation():
     with pytest.raises(KeyError):
-        structure_entry(_fixture_chain(), iron_fly(24000, 1000), 65, date(2026, 4, 13))
+        structure_entry(_fixture_chain(), iron_fly(24000, 1000), 65, date(2026, 4, 13), AT, EXP)
+
+
+def test_wrong_expiry_or_time_has_no_quotes():
+    with pytest.raises(KeyError):
+        structure_entry(_fixture_chain(), iron_fly(24000, 500), 65, date(2026, 4, 13), AT, "2026-05-26")
+    with pytest.raises(KeyError):
+        structure_entry(_fixture_chain(), iron_fly(24000, 500), 65, date(2026, 4, 13), "2026-04-13 11:00", EXP)
+
+
+def test_chain_schema_is_enforced():
+    bad = _fixture_chain().drop(columns=["expiry"])
+    with pytest.raises(ValueError):
+        structure_entry(bad, iron_fly(24000, 500), 65, date(2026, 4, 13), AT, EXP)
+    dup = pd.concat([_fixture_chain(), _fixture_chain().iloc[:1]])
+    with pytest.raises(ValueError):
+        structure_entry(dup, iron_fly(24000, 500), 65, date(2026, 4, 13), AT, EXP)
 
 
 # ---------------- data ----------------
@@ -191,3 +225,59 @@ def test_reconcile_finds_disagreement():
     a = pd.Series([100, 101, 102.0], index=pd.date_range("2024-01-01", periods=3))
     b = pd.Series([100, 101, 103.0], index=a.index)
     assert len(reconcile(a, b)) == 1
+
+
+def test_content_hash_ignores_line_endings(tmp_path):
+    a, b = tmp_path / "lf.csv", tmp_path / "crlf.csv"
+    a.write_bytes(b"Date,Close\n2024-01-01,1\n")
+    b.write_bytes(b"Date,Close\r\n2024-01-01,1\r\n")
+    assert sha256(a) != sha256(b)
+    assert content_sha256(a) == content_sha256(b)
+    assert verify_manifest(tmp_path, {"crlf.csv": content_sha256(a)}) == []
+    assert verify_manifest(tmp_path, {"crlf.csv": "0" * 64, "nope.csv": "x"}) != []
+
+
+# ---------------- ledger checkpoint ----------------
+def test_checkpoint_detects_deleting_the_last_entry(tmp_path):
+    p = tmp_path / "l.jsonl"
+    L = Ledger(p)
+    L.register("H1", {}, {"pass": "x"})
+    L.record_trial("H1", "development", {"sharpe": 0.1})
+    L.record_trial("H1", "development", {"sharpe": -0.5})
+    cp = L.checkpoint(tmp_path / "cp.json")
+    lines = p.read_text().splitlines()
+    p.write_text("\n".join(lines[:-1]) + "\n")       # drop the disappointing last trial
+    assert L.verify_chain()                              # internally still consistent ...
+    assert not L.verify_chain(cp)                        # ... but caught by the checkpoint
+
+
+def test_checkpoint_detects_a_rebuilt_chain(tmp_path):
+    p, q = tmp_path / "l.jsonl", tmp_path / "forged.jsonl"
+    L = Ledger(p)
+    L.register("H1", {}, {"pass": "x"})
+    L.record_trial("H1", "development", {"sharpe": -0.5})
+    cp = L.checkpoint(tmp_path / "cp.json")
+    F = Ledger(q)                                        # forger rebuilds a valid chain with a better result
+    F.register("H1", {}, {"pass": "x"})
+    F.record_trial("H1", "development", {"sharpe": 0.9})
+    p.write_text(q.read_text())
+    assert L.verify_chain() and not L.verify_chain(cp)
+
+
+def test_appending_after_checkpoint_is_allowed(tmp_path):
+    L = Ledger(tmp_path / "l.jsonl")
+    L.register("H1", {}, {"pass": "x"})
+    cp = L.checkpoint(tmp_path / "cp.json")
+    L.record_trial("H1", "development", {"sharpe": 0.2})
+    assert L.verify_chain(cp)
+
+
+def test_trial_types_are_counted_separately(tmp_path):
+    L = Ledger(tmp_path / "l.jsonl")
+    L.register("H1", {}, {"pass": "x"}, provenance={"prereg_sha256": "abc"})
+    L.record_trial("H1", "full", {"t": 1.9}, trial_type="new")
+    L.record_trial("H1", "full", {"t": 2.4}, trial_type="robustness")
+    L.record_trial("H1", "full", {"t": 1.9}, trial_type="rerun")
+    assert L.n_trials() == 3 and L.n_trials(trial_type="robustness") == 1
+    with pytest.raises(LedgerError):
+        L.record_trial("H1", "full", {}, trial_type="tweak")

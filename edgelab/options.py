@@ -58,17 +58,33 @@ def fill_price(quote: pd.Series, side: str, model: str = "cross", slip_ticks: in
     return max(px, 0.0)
 
 
-def structure_entry(chain: pd.DataFrame, legs: List[Leg], lot_size: int, trade_date: date,
-                    model: str = "cross", slip_ticks: int = 0) -> dict:
-    """Net credit (positive = received) and costs for entering a structure from a quote snapshot.
+CHAIN_COLUMNS = ("timestamp", "expiry", "kind", "strike", "bid", "ask")
 
-    chain columns: kind, strike, bid, ask. Missing strikes raise, they are never interpolated.
+
+def validate_chain(chain: pd.DataFrame) -> None:
+    missing = [c for c in CHAIN_COLUMNS if c not in chain.columns]
+    if missing:
+        raise ValueError(f"chain is missing columns {missing}; required {CHAIN_COLUMNS}")
+    dup = chain.duplicated(subset=["timestamp", "expiry", "kind", "strike"])
+    if dup.any():
+        raise ValueError(f"{int(dup.sum())} duplicate quotes for the same timestamp/expiry/kind/strike")
+
+
+def structure_entry(chain: pd.DataFrame, legs: List[Leg], lot_size: int, trade_date: date,
+                    at, expiry, model: str = "cross", slip_ticks: int = 0) -> dict:
+    """Net credit (positive = received) and costs for entering a structure at time `at` in
+    contract `expiry`, using only quotes stamped exactly `at`.
+
+    chain columns: timestamp, expiry, kind, strike, bid, ask. A missing quote raises; nothing is
+    interpolated or taken from another time or expiry.
     """
+    validate_chain(chain)
+    snap = chain[(chain["timestamp"] == pd.Timestamp(at)) & (chain["expiry"] == pd.Timestamp(expiry))]
     fills, credit = [], 0.0
     for leg in legs:
-        q = chain[(chain["kind"] == leg.kind) & (chain["strike"] == leg.strike)]
+        q = snap[(snap["kind"] == leg.kind) & (snap["strike"] == leg.strike)]
         if q.empty:
-            raise KeyError(f"no quote for {leg.kind} {leg.strike}")
+            raise KeyError(f"no quote for {leg.kind} {leg.strike} at {at} expiry {expiry}")
         px = fill_price(q.iloc[0], leg.side, model, slip_ticks)
         qty = leg.lots * lot_size
         fills.append(Fill(leg.side, px, qty))
@@ -78,8 +94,18 @@ def structure_entry(chain: pd.DataFrame, legs: List[Leg], lot_size: int, trade_d
             "fills": fills}
 
 
+def structure_net_pnl_at_expiry(entry: dict, legs: List[Leg], settle: float, lot_size: int,
+                                exit_costs: float = 0.0) -> float:
+    """Complete trade result held to expiry: entry credit - entry costs + expiry payoff - exit costs.
+
+    exit_costs should include brokerage on expired/assigned contracts and STT on exercised legs.
+    """
+    return entry["net_credit"] - entry["costs"] + structure_payoff_at_expiry(legs, settle, lot_size) - exit_costs
+
+
 def structure_payoff_at_expiry(legs: List[Leg], settle: float, lot_size: int) -> float:
-    """Cash flow at expiry (negative = we pay) for the legs, excluding entry premium."""
+    """Cash flow at expiry (negative = we pay) for the legs, EXCLUDING entry premium and costs.
+    For an iron fly its minimum is -wing * qty; the trade's max net loss is that minus credit plus costs."""
     total = 0.0
     for leg in legs:
         intrinsic = max(0.0, settle - leg.strike) if leg.kind == "C" else max(0.0, leg.strike - settle)

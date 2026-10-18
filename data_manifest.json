@@ -1,0 +1,18 @@
+{
+  "note": "Third-party public copies of exchange data, used for research only. Content hashes use LF-normalised line endings.",
+  "repos": {
+    "FDRM_VIX": {
+      "url": "https://github.com/Subham1709/FDRM_VIX",
+      "commit": "1c7900d6dba94f229f8a4d323936aaeb2aa92bfe"
+    },
+    "NIFTY_50_STOCK_DATA": {
+      "url": "https://github.com/kalilurrahman/NIFTY_50_STOCK_DATA",
+      "commit": "508787e1f8e07e710e74a58bf6d43f5958fbf48e"
+    }
+  },
+  "files": {
+    "FDRM_VIX/data/nifty50_daily_raw.csv": "4bf4d7f063ff592b15a8ad0a8808a6a9f375c9dcfe0d98c8cb3ad90a469267e6",
+    "FDRM_VIX/data/india_vix_daily_raw.csv": "c5bee0762b896dbfee434aad257db3e53a731bb37569f56a036ee6e1c27d82ee",
+    "NIFTY_50_STOCK_DATA/NIFTY50_stock_history.csv": "4bf4d7f063ff592b15a8ad0a8808a6a9f375c9dcfe0d98c8cb3ad90a469267e6"
+  }
+}
