@@ -1,0 +1,134 @@
+{
+  "result": {
+    "sample": {
+      "start": "2020-01-02",
+      "end": "2026-03-10",
+      "days": 1515,
+      "non_overlapping_windows": 73
+    },
+    "vol_spread_mean_volpts": 1.89,
+    "nw_t": 1.96,
+    "vol_spread_median_volpts": 2.83,
+    "share_windows_positive": 0.767,
+    "sub_2020_2022_mean_volpts": 2.29,
+    "sub_2020_2022_n": 35,
+    "sub_2023_end_mean_volpts": 1.52,
+    "sub_2023_end_n": 38,
+    "mean_iv": 17.23,
+    "mean_rv": 15.35,
+    "mean_rel_edge": 0.115,
+    "median_rel_edge": 0.176,
+    "rel_edge_bootstrap_95ci": [
+      0.004,
+      0.197
+    ],
+    "all_days_mean_spread_volpts": 2.05,
+    "iron_fly_cost_model": {
+      "credit": 26520.75,
+      "statutory_and_brokerage": 334.48,
+      "spread_cost_assumed": 260.0,
+      "cost_fraction_of_credit": 0.02,
+      "lot": 65,
+      "wing": 500
+    },
+    "iron_fly_cost_warnings": [],
+    "model_straddle": {
+      "n": 72,
+      "mean_pnl_pct_spot": 0.276,
+      "median_pnl_pct_spot": 1.065,
+      "win_rate": 0.681,
+      "worst_pct_spot": -22.83,
+      "worst_date": "2020-03-03",
+      "mean_premium_pct_spot": 3.96,
+      "psr_vs_0": 0.713,
+      "concentration_k3": {
+        "total": 19.85,
+        "total_without_best_k": 6.81,
+        "total_without_worst_k": 54.75,
+        "worst": -22.83,
+        "best": 5.16
+      },
+      "mean_excluding_covid_and_mar2026": 0.634
+    },
+    "overnight_share_of_variance": 0.408,
+    "criteria": {
+      "c1": false,
+      "c2": true,
+      "c3": true,
+      "c4": true
+    },
+    "verdict": "FAIL"
+  },
+  "meta": {
+    "provenance_sha256": {
+      "data\\raw\\FDRM_VIX\\data\\nifty50_daily_raw.csv": "6444a21c968518383c606da26409f19bde5a79e1e19795984adc9740fd21a82e",
+      "data\\raw\\NIFTY_50_STOCK_DATA\\NIFTY50_stock_history.csv": "6444a21c968518383c606da26409f19bde5a79e1e19795984adc9740fd21a82e",
+      "data\\raw\\FDRM_VIX\\data\\india_vix_daily_raw.csv": "22b42f2ddd47f8a0c9ed98792fd6daa71c15d0698e9db3905dc5dbcba12c00f8"
+    },
+    "validation": [
+      {
+        "name": "nifty_fdrm",
+        "rows": 4554,
+        "start": "2007-09-17",
+        "end": "2026-04-13",
+        "issues": [
+          "WARN large move +16.33% on 2009-05-18 (check against an official source)"
+        ]
+      },
+      {
+        "name": "nifty_kalilur",
+        "rows": 4554,
+        "start": "2007-09-17",
+        "end": "2026-04-13",
+        "issues": [
+          "WARN large move +16.33% on 2009-05-18 (check against an official source)"
+        ]
+      },
+      {
+        "name": "india_vix",
+        "rows": 1627,
+        "start": "2020-01-02",
+        "end": "2026-08-24",
+        "issues": []
+      }
+    ],
+    "nifty_sources_identical_on_common_dates": true,
+    "nifty_source_disagreements_gt_0.1pct": 0,
+    "spot_checks": [
+      {
+        "date": "2026-03-19",
+        "field": "nifty",
+        "expected": 23002.15,
+        "got": 23002.150390625,
+        "match_within_0.1pct": true,
+        "source": "https://www.venturasecurities.com/?p=51444"
+      },
+      {
+        "date": "2026-03-30",
+        "field": "nifty",
+        "expected": 22331.4,
+        "got": 22331.400390625,
+        "match_within_0.1pct": true,
+        "source": "https://www.angelone.in/news/market-updates/top-gainers-and-losers-on-march-30-2026-hindalco-leads-gains-bajaj-finance-tops-losers"
+      },
+      {
+        "date": "2026-03-19",
+        "field": "vix",
+        "expected": 22.8,
+        "got": 22.799999237060547,
+        "match_within_0.1pct": true,
+        "source": "https://www.venturasecurities.com/?p=51444"
+      },
+      {
+        "date": "2026-07-07",
+        "field": "vix",
+        "expected": 11.64,
+        "got": 11.649999618530272,
+        "match_within_0.1pct": true,
+        "source": "https://hdfcsky.com/news/india-vix-falls-1-52percent-to-11-64-as-easing-global-risks-push-fear-gauge-to-five-month-low"
+      }
+    ],
+    "ledger_chain_valid": true,
+    "ledger_trials": 1
+  }
+}

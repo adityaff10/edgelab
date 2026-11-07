@@ -3,6 +3,14 @@
 A small research lab for Indian index options whose main job is to **reject false
 discoveries** before anyone trades them. It is not a trading bot; no live order path exists.
 
+**Why it exists:** it started from a Reddit post claiming steady profits from automated
+options selling. Instead of copying the strategy, this project tests whether the underlying
+edge, the volatility risk premium, actually holds up in Nifty data. The first experiment
+says: not convincingly.
+
+**How it was built:** with AI assistance. I set it up, reproduced the results independently
+on Windows, and found and fixed a cross-platform data-hashing bug along the way.
+
 ## Quick start (Windows PowerShell; on macOS/Linux use `source .venv/bin/activate`)
 
 ```powershell
